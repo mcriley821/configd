@@ -1,0 +1,8 @@
+*.log
+*.swp
+dep
+obj
+configd
+*.json
+logs/
+*.socket
