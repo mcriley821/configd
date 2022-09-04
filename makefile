@@ -1,6 +1,6 @@
 TARGET = configd
 CXXC = @g++
-CXXFLAGS = -std=c++17 -Wall -Werror -Wextra -Wfatal-errors -I$(INC_DIR)
+CXXFLAGS = -std=c++20 -Wall -Werror -Wextra -Wfatal-errors -Wno-deprecated-experimental-coroutine -I$(INC_DIR)
 DEFINES = -DBOOST_LOG_DYN_LINK
 
 ifndef $(CONF)

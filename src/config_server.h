@@ -29,8 +29,7 @@ public:
 private:
   void handleSignal(const error_code& error, int signum);
 
-  void receive();
-  void onReceive(const error_code& error, size_t transferred);
+  boost::asio::awaitable<void> receive();
   
   std::unique_ptr<boost::asio::io_context> _ioContext;
   std::unique_ptr<boost::asio::local::datagram_protocol::socket> _socket = nullptr;
@@ -41,7 +40,6 @@ private:
 
   boost::asio::signal_set _signalSet;
 
-  std::string _receive_buffer;
   unsigned int _threads;
 };
 

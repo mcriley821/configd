@@ -3,24 +3,25 @@
 #include <signal.h>
 
 #include <functional>
+#include <experimental/coroutine>
 
 #include <boost/log/trivial.hpp>
 #include <boost/asio.hpp>
-
+#include <boost/asio/experimental/as_tuple.hpp>
 #include "config_parser_factory.h"
 
 
 using namespace boost::asio;
 namespace fs = boost::filesystem;
 using error_code = boost::system::error_code;
-using endpoint = boost::asio::local::datagram_protocol::endpoint;
-using socket_t = boost::asio::local::datagram_protocol::socket;
+
+using endpoint = local::datagram_protocol::endpoint;
+using socket_t = local::datagram_protocol::socket;
 
 
 ConfigServer::ConfigServer(unsigned int threads)
   : _ioContext(std::make_unique<io_context>(threads))
   , _signalSet(_ioContext->get_executor())
-  , _receive_buffer(65536, '0')
   , _threads(threads)
 {
    for (int signum: {SIGABRT, SIGTERM, SIGINT, SIGHUP, SIGPIPE})
@@ -87,7 +88,7 @@ void ConfigServer::run(const std::string& socket_file)
   _socket->set_option(socket_base::broadcast(true));
 
   BOOST_LOG_TRIVIAL(info) << "Starting to serve...";
-  receive();
+  co_spawn(*_strand, receive(), detached);
   for (unsigned int i = 1; i < _threads - 1; i++)
     _threadPool.emplace_back([&](){ _ioContext->run(); });
   _ioContext->run();
@@ -111,27 +112,19 @@ void ConfigServer::stop()
 }
 
 
-void ConfigServer::receive() 
+awaitable<void> ConfigServer::receive() 
 {
-  BOOST_LOG_TRIVIAL(trace) << "Posting async receive from. Ready to receive";
-  _socket->async_receive(
-      boost::asio::buffer(_receive_buffer.data(), 65536),
-      bind_executor(*_strand,
-        std::bind(&ConfigServer::onReceive, this,
-                  std::placeholders::_1, std::placeholders::_2))
-      );
+  std::string string_buffer(65536, '\0');
+  while (true) {
+    BOOST_LOG_TRIVIAL(trace) << "Ready to receive";
+    auto [err, n] = co_await _socket->async_receive(
+        buffer(string_buffer.data(), 65536), experimental::as_tuple(use_awaitable));
+    if (err) {
+      BOOST_LOG_TRIVIAL(error) << "Error receiving from server socket: " << err.message();
+      continue;
+    }
+    BOOST_LOG_TRIVIAL(debug) << "Received " << n << " bytes of data";
+    BOOST_LOG_TRIVIAL(trace) << "Data: " << string_buffer; 
+  }
 }
 
-
-void ConfigServer::onReceive(const error_code& error, size_t transferred) 
-{
-  BOOST_LOG_TRIVIAL(debug) << "Received " << transferred << " bytes of data";
-  if (error) {
-    BOOST_LOG_TRIVIAL(error) << "Receive error: " << error.message();
-  }
-  else {
-    // parse, post, send
-  }
-  
-  receive();
-}
